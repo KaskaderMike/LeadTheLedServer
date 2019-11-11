@@ -11,13 +11,19 @@ def waitForData(server_sock, strip):
         print("Accepted connection from ", client_info)
         print("waiting for data")
         while True:
-            data = client_sock.recv(64)
-            if len(data) == 0: 
+            data = client_sock.recv(256)
+            if len(data) == 0:
                 pass
             else:
-                strip.setPixelColor(int.from_bytes(data, byteorder='big'), 30)
-                strip.show()
-                print("received [%s]" % data)
+                for x in range(64):
+                    value = int.from_bytes(data[x*4:x*4+4], byteorder='little')
+               	    if value != 8947848:
+                        strip.setPixelColor(x, value)
+                    else:
+                        strip.setPixelColor(x,0)
+                    print("x: %d value: %d" % (x, value))
+                    strip.show()
+               # print("received [%s]" % data)
                 client_sock.send(data)
     except IOError:
         print("connection closed")
@@ -60,6 +66,7 @@ print("Waiting for connection on RFCOMM channel %d" % port)
 strip = Adafruit_NeoPixel(LED_COUNT, LED_PIN, LED_FREQ_HZ, LED_DMA, LED_INVERT, LED_BRIGHTNESS, LED_CHANNEL)
 # Intialize the library (must be called once before other functions).
 strip.begin()
+
 waitForData(server_sock, strip)
 
 print("disconnected")
