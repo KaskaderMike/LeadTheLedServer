@@ -4,7 +4,7 @@ import struct
 from neopixel import *
 import argparse
 from bluetooth import *
-from threading import Thread
+from threading import Lock, Thread
 
 ColorList = []
 AnimationList = []
@@ -19,11 +19,12 @@ def isHeaderFrame(data):
     else:
         return False
 
-def displayAnimation(AnimationList, strip):
+def displayAnimation(AnimList, strip):
     global AnimationInProgress
-    AnimationInProgress=True
     while AnimationInProgress == True:
-        for matrix in AnimationList:
+        for matrix in AnimList:
+            if AnimationInProgress == False:
+                break
             setLeds(matrix, strip)
             time.sleep(1)
 
@@ -36,39 +37,41 @@ def setLeds(data, strip):
             strip.show()
             ColorList[x] = value
 
-def waitForData(server_sock, strip, ReceivingAnimation):
+def waitForData(server_sock, strip):
     global AnimationInProgress
     global AnimationList
-    try:
-        while True:
+    ReceivingAnimation = False
+    while True:
+        try:
             client_sock, client_info = server_sock.accept()
             print("Accepted connection from ", client_info)
-            print("waiting for data")
+            print("Waiting for data")
             data = client_sock.recv(256)
+            client_sock.close()
             if len(data) != 256:
-                pass
+                 pass
             else:
                 if AnimationInProgress == True:
                     AnimationInProgress = False
+                    AnimationList.clear()
                 if isHeaderFrame(data):
                     if ReceivingAnimation == False:
                         ReceivingAnimation = True
                     else:
                         ReceivingAnimation = False
-                        thread = Thread(target = displayAnimation, args = (AnimationList,strip,))
-                        thread.start()
-                        #displayAnimation(AnimationList)
+                        AnimationInProgress = True
+                        AnimationThread = Thread(target = displayAnimation, args = (AnimationList,strip,))
+                        AnimationThread.start()
                 else:
                     if ReceivingAnimation == False:
                         setLeds(data, strip)
                     else:
                         AnimationList.append(data)
-    except IOError:
-        print("connection closed")
-        client_sock.close()
-        waitForData(server_sock, strip, ReceivingAnimation)
-        pass
-    
+            server_sock.sendall(data)
+        except IOError:
+          print("connection closed")
+          client_sock.close()
+
 
 hdmi_force_hotplug=1
 hdmi_force_edid_audio=1
@@ -104,8 +107,7 @@ print("Waiting for connection on RFCOMM channel %d" % port)
 strip = Adafruit_NeoPixel(LED_COUNT, LED_PIN, LED_FREQ_HZ, LED_DMA, LED_INVERT, LED_BRIGHTNESS, LED_CHANNEL)
 # Intialize the library (must be called once before other functions).
 strip.begin()
-AnimationInProgress = False
-waitForData(server_sock, strip, False)
+waitForData(server_sock, strip)
 
 print("disconnected")
 
